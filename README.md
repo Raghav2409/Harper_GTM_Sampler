@@ -36,12 +36,6 @@ with multi-touch journeys across **Google / Meta / TikTok + Direct/Organic/Partn
 - **E&S complexity**: `is_es_eligible=1` increases premium but reduces bind probability and increases time-to-quote/bind.
 - **Bundling**: larger businesses more likely to bind 2–3 policies and have higher retention.
 
-## Suggested MVP analyses
-1) **Paid channel efficiency**: cost per lead, cost per bound, cost per $1k premium by channel/campaign.
-2) **Multi-touch attribution**: compare last-touch vs Markov/Time-decay using `touchpoints.csv` (filter `event_stage='marketing'`).
-3) **Lead scoring**: predict `is_bound` from `leads.csv` features; produce decile lift and value concentration curves.
-4) **Routing simulation**: compare bind rate if top decile leads get fast follow-up (use `time_to_first_contact_min` bucket analysis).
-5) **EGPL**: compute `expected_value = P(bind)*E(premium)*commission*(1+ret12)` and use it for value-based bidding.
 
 ## Counts (v1)
 - Leads: 102,174
