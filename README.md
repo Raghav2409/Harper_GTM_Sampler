@@ -65,11 +65,14 @@ with multi-touch journeys across **Google / Meta / TikTok + Direct/Organic/Partn
 - **E&S complexity**: `is_es_eligible=1` increases premium but reduces bind probability and increases time-to-quote/bind.
 - **Bundling**: larger businesses more likely to bind 2–3 policies and have higher retention.
 
+<<<<<<< HEAD
 ### Dataset Counts (v1)
 - **Leads**: 102,174
 - **Touchpoints**: 723,995
 - **Bound leads**: 14,330
 - **Policies**: 20,727
+=======
+>>>>>>> 04e475170129fabe80c70da7dc528b51fb1682f5
 
 ## 🛠️ Installation
 
