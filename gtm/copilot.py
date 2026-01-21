@@ -25,7 +25,7 @@ def build_grounding_context(insights: Any) -> str:
         f"{s.get('leads'):,} leads → {s.get('bound_leads'):,} bound ({s.get('bind_rate'):.1%}). "
         f"${s.get('total_spend_usd'):,.0f} spend → ${s.get('total_premium_annual_usd'):,.0f} premium. "
         f"EGP24: ${s.get('total_egp24_usd'):,.0f}. "
-        f"Automation: {s.get('automation_rate', 0):.1%}, CAC:LTV: {s.get('cac_ltv_ratio', 0):.1f}:1, "
+        f"Automation: {s.get('automation_rate', 0):.1%}, LTV:CAC: {s.get('cac_ltv_ratio', 0):.1f}:1, "
         f"Net commission: ${s.get('net_commission_revenue_usd', 0):,.0f}."
     )
 
