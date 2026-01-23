@@ -525,34 +525,37 @@ CUSTOM_CSS = """
         border-right-color: transparent !important;
     }
     
-    /* Chat input - Translucent, no white box on hover */
+    /* Chat input - More visible and prominent */
     [data-testid="stChatInput"] {
-        background: rgba(255, 255, 255, 0.85) !important;
-        backdrop-filter: blur(10px) !important;
-        border: 2px solid rgba(16, 185, 129, 0.3) !important;
-        border-radius: 12px !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+        background: white !important;
+        border: 3px solid var(--accent) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25), 0 4px 12px rgba(0, 0, 0, 0.1) !important;
         transition: all 0.3s ease !important;
+        margin: 1rem 0 !important;
+        padding: 0.5rem !important;
     }
     
     [data-testid="stChatInput"]:hover,
     [data-testid="stChatInput"]:focus {
-        background: rgba(255, 255, 255, 0.85) !important;
-        border-color: rgba(16, 185, 129, 0.5) !important;
-        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.15) !important;
-        transform: translateY(-2px);
+        background: white !important;
+        border-color: var(--accent-dark) !important;
+        box-shadow: 0 12px 32px rgba(16, 185, 129, 0.35), 0 6px 16px rgba(0, 0, 0, 0.15) !important;
+        transform: translateY(-3px);
     }
     
     [data-testid="stChatInput"] input {
         background: transparent !important;
         color: #111827 !important;
-        font-size: 1rem !important;
-        padding: 0.75rem 1rem !important;
+        font-size: 1.1rem !important;
+        font-weight: 500 !important;
+        padding: 1rem 1.25rem !important;
     }
     
     [data-testid="stChatInput"] input::placeholder {
-        color: #6b7280 !important;
-        opacity: 0.8 !important;
+        color: #4b5563 !important;
+        opacity: 1 !important;
+        font-weight: 500 !important;
     }
     
     /* Ensure text is always visible in chat input */
@@ -562,6 +565,22 @@ CUSTOM_CSS = """
     
     [data-testid="stChatInput"] input:focus {
         color: #111827 !important;
+        outline: none !important;
+    }
+    
+    /* Chat input button styling */
+    [data-testid="stChatInput"] button {
+        background: var(--accent) !important;
+        border-radius: 10px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 600 !important;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
+    }
+    
+    [data-testid="stChatInput"] button:hover {
+        background: var(--accent-dark) !important;
+        box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4) !important;
+        transform: translateY(-1px);
     }
     
     /* Sidebar toggle buttons - positioned on sides */
@@ -1981,6 +2000,17 @@ def _handle_copilot_input(raw, insights) -> None:
             # No client available - don't show chat input
             return
     
+    # Add visible label above chat input
+    st.markdown(
+        '<div style="text-align: center; margin: 2rem 0 1rem 0;">'
+        '<p style="font-size: 1.1rem; font-weight: 600; color: #111827; margin-bottom: 0.5rem;">'
+        '🤖 <span style="color: var(--accent);">Ask GTM Co-Pilot</span>'
+        '</p>'
+        '<p style="font-size: 0.9rem; color: #6b7280; margin: 0;">Get instant insights about your GTM data</p>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+    
     # Chat input at bottom
     user_msg = st.chat_input("Ask the GTM copilot…")
     if not user_msg:
@@ -2035,7 +2065,7 @@ def main() -> None:
         page_title=APP_TITLE,
         page_icon="🚀",
         layout="wide",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed",
         menu_items={
             'Get Help': None,
             'Report a bug': None,
