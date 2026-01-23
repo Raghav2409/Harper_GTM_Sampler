@@ -165,6 +165,44 @@ CUSTOM_CSS = """
         line-height: 1.2 !important;
     }
     
+    /* Custom metric boxes */
+    .metric-box {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        border: 2px solid #e5e7eb;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .metric-box:hover {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+        border-color: #10b981;
+    }
+    
+    .metric-box-label {
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        color: #4b5563 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.75rem;
+        text-align: center;
+    }
+    
+    .metric-box-value {
+        font-size: 2rem !important;
+        font-weight: 700 !important;
+        color: #111827 !important;
+        text-align: center;
+        line-height: 1.2;
+    }
+    
     /* Dataframes - Light colored tables */
     [data-testid="stDataFrame"] {
         border-radius: 12px;
@@ -717,7 +755,7 @@ def _semantic_column_names(df: pd.DataFrame, table_type: str = "default") -> pd.
         "stq_by_vertical": {
             "vertical": "Vertical",
             "quoted": "Quoted Leads",
-            "avg_stq_ratio": "Avg STQ Ratio",
+            "avg_stq_ratio": "Submission-to-quote (STQ) Rate",
             "stq_count": "STQ Count"
         },
         "lead_score_intensity": {
@@ -1277,16 +1315,30 @@ def _render_dashboard(raw) -> None:
             leakage = insights.golden_window_leakage.iloc[0]
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("💰 Leakage", _money(leakage.get("leakage_egp24_usd", 0)), delta=None)
+                leakage_value = _money(leakage.get("leakage_egp24_usd", 0))
+                st.markdown(
+                    f'<div class="metric-box">'
+                    f'<div class="metric-box-label">💰 Revenue Leakage</div>'
+                    f'<div class="metric-box-value">{leakage_value}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
             with col2:
-                st.metric("🎯 Potential if Fixed", _money(leakage.get("potential_egp24_if_fixed", 0)), delta=None)
+                potential_value = _money(leakage.get("potential_egp24_if_fixed", 0))
+                st.markdown(
+                    f'<div class="metric-box">'
+                    f'<div class="metric-box-label">🎯 Potential if Fixed</div>'
+                    f'<div class="metric-box-value">{potential_value}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
         else:
             st.info("Golden window leakage data not available.")
         
         st.divider()
         
         # STQ Ratio section
-        st.markdown("### ⏱️ Submission-to-Quote (STQ) Ratio by Vertical")
+        st.markdown("### ⏱️ Quote Conversion Rate")
         st.caption("Lower = faster carrier response | Identify bottlenecks")
         if not insights.stq_by_vertical.empty:
             col1, col2 = st.columns([1, 1])
@@ -1296,18 +1348,18 @@ def _render_dashboard(raw) -> None:
             with col2:
                 # Use semantic column names for chart
                 stq_chart = insights.stq_by_vertical.head(10).copy()
-                stq_chart = stq_chart.rename(columns={"vertical": "Vertical", "avg_stq_ratio": "Avg STQ Ratio"})
+                stq_chart = stq_chart.rename(columns={"vertical": "Vertical", "avg_stq_ratio": "Submission-to-quote (STQ) Rate"})
                 # Format vertical names in chart
                 if "Vertical" in stq_chart.columns:
                     stq_chart["Vertical"] = stq_chart["Vertical"].apply(_format_vertical_name)
                 fig_stq = px.bar(
                     stq_chart,
                     x="Vertical",
-                    y="Avg STQ Ratio",
-                    color="Avg STQ Ratio",
+                    y="Submission-to-quote (STQ) Rate",
+                    color="Submission-to-quote (STQ) Rate",
                     color_continuous_scale="RdYlGn_r",
                     title="STQ Ratio by Vertical",
-                    labels={"Vertical": "Vertical", "Avg STQ Ratio": "Avg STQ Ratio"}
+                    labels={"Vertical": "Vertical", "Submission-to-quote (STQ) Rate": "Submission-to-quote (STQ) Rate"}
                 )
                 _update_chart_layout(fig_stq, height=400, showlegend=False)
                 st.plotly_chart(fig_stq, use_container_width=True)
@@ -1316,7 +1368,7 @@ def _render_dashboard(raw) -> None:
         
         st.divider()
         
-        st.markdown("### 🎯 Lead Score Intensity Map")
+        st.markdown("### 🎯 Lead Intent Map by Vertical")
         st.caption("Intent + Risk score distribution | Find high-value opportunities")
         if not insights.lead_score_intensity.empty:
             col1, col2 = st.columns([1, 1])
