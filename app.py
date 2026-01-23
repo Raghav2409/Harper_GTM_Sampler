@@ -2043,15 +2043,6 @@ def main() -> None:
         }
     )
 
-    # Initialize copilot client early from environment variables or Streamlit secrets
-    # This ensures the client is available as soon as the app starts
-    if "copilot_client" not in st.session_state or st.session_state.copilot_client is None:
-        client, model, temperature = _get_copilot_client()
-        if client is not None:
-            st.session_state.copilot_client = client
-            st.session_state.copilot_model = model
-            st.session_state.copilot_temperature = temperature
-
     root_dir = str(Path(__file__).parent)
     cache_key = _get_data_cache_key(root_dir)
     raw = _load_all(root_dir, cache_key=cache_key)
@@ -2082,22 +2073,24 @@ def main() -> None:
     # Update raw dict to include filtered data for dashboard
     raw_with_filtered = {"data": raw["data"], "insights": insights, "f_leads": f_leads}
     
-    # Get copilot client - refresh if not already initialized or if user entered new key
-    client = st.session_state.get("copilot_client")
-    if client is None:
-        # Try to get client if not already initialized
-        client, model, temperature = _get_copilot_client()
-        if client is not None:
-            st.session_state.copilot_client = client
-            st.session_state.copilot_model = model
-            st.session_state.copilot_temperature = temperature
-    else:
-        # Use existing client, but refresh model and temperature from current state
-        model = st.session_state.get("copilot_model", "gpt-4o-mini")
-        temperature = st.session_state.get("copilot_temperature", 0.2)
+    # Get copilot client with embedded API key
+    client, model, temperature = _get_copilot_client()
     
-    # Update copilot insights with current filtered insights
+    # Initialize copilot session state
     if client is not None:
+        if "copilot_client" not in st.session_state:
+            st.session_state.copilot_client = client
+        if "copilot_model" not in st.session_state:
+            st.session_state.copilot_model = model
+        if "copilot_temperature" not in st.session_state:
+            st.session_state.copilot_temperature = temperature
+        if "copilot_insights" not in st.session_state:
+            st.session_state.copilot_insights = insights
+        
+        # Update if changed
+        st.session_state.copilot_client = client
+        st.session_state.copilot_model = model
+        st.session_state.copilot_temperature = temperature
         st.session_state.copilot_insights = insights
     
     # Render dashboard with conditional layout
