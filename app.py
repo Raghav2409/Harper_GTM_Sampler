@@ -16,8 +16,8 @@ from gtm.data import load_gtm_data
 from gtm.metrics import compute_insights_pack
 
 
-APP_TITLE = "Harper GTM Co‑Pilot"
-APP_SUBTITLE = "Real-time optimization dashboard for growth & revenue acceleration"
+APP_TITLE = "Harper Growth Intelligence OS"
+APP_SUBTITLE = "Real-time GTM optimization analytics with co-pilot support"
 
 # Modern CSS with gradients and improved aesthetics
 CUSTOM_CSS = """
@@ -1025,7 +1025,7 @@ def _render_header(insights) -> None:
     
     # Title section
     st.title(APP_TITLE)
-    st.markdown(f'<div style="text-align: center; margin: 1rem 0 2rem 0;"><p style="color: #111827; font-size: 2.5rem; font-weight: 700; line-height: 1.3;">{APP_SUBTITLE}</p></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="text-align: left; margin: 1rem 0 2rem 0;"><p style="color: #111827; font-size: 2.5rem; font-weight: 700; line-height: 1.3;">{APP_SUBTITLE}</p></div>', unsafe_allow_html=True)
     
     st.divider()
     
@@ -1980,7 +1980,7 @@ def main() -> None:
         menu_items={
             'Get Help': None,
             'Report a bug': None,
-            'About': "Harper GTM Co-Pilot - Operational dashboard for AI-native brokerage optimization"
+            'About': "Harper Growth Intelligence OS - Operational dashboard for AI-native brokerage optimization"
         }
     )
 
