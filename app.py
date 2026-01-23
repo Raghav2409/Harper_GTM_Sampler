@@ -576,6 +576,18 @@ CUSTOM_CSS = """
         right: 4px;
         box-shadow: -4px 0 20px rgba(59, 130, 246, 0.3);
     }
+    
+    /* Align comments at bottom of columns */
+    .column-container {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+    }
+    
+    .column-comment {
+        margin-top: auto;
+        padding-top: 1rem;
+    }
 </style>
 """
 
@@ -634,18 +646,18 @@ def _filter_useful_columns(df: pd.DataFrame, table_type: str) -> pd.DataFrame:
     useful_columns = {
         "funnel": ["stage", "count", "rate_vs_leads", "conversion_lift"],  # Remove premium/egp24 (zeros for non-bound stages)
         "stq_by_vertical": ["vertical", "avg_stq_ratio", "quoted"],  # Remove stq_count
-        "lead_score_intensity": ["vertical", "leads", "avg_intent_score", "avg_risk_score", "opportunity_score"],  # Remove avg_egp24
-        "vertical_opportunity_score": ["vertical", "leads", "opportunity_score", "avg_premium", "bound_rate"],  # Remove avg_intent_score, avg_egp24
+        "lead_score_intensity": ["vertical", "leads", "avg_intent_score", "avg_risk_score"],  # Remove opportunity_score and avg_egp24
+        "vertical_opportunity_score": ["vertical", "leads", "avg_premium", "opportunity_score", "bound_rate", "avg_egp24"],  # Added avg_egp24 for Expected Profit per Lead (24-mo)
         "lead_quality_by_channel": ["source_channel", "leads", "bound_rate", "avg_risk_score", "roi_egp24", "quality_score"],  # Remove total_egp24, total_cac, high_risk_pct, avg_egp24
         "paid_efficiency_by_channel": ["channel", "leads", "bound", "spend_usd", "cpl", "cpb", "roi_egp24", "premium"],  # Remove cost_per_1k_premium
         "paid_efficiency_by_campaign": ["campaign_id", "channel", "leads", "bound", "spend_usd", "cpl", "roi_egp24"],  # Remove cpb, premium (less useful for campaigns)
-        "ai_vs_human_perf": ["ai_contact_type", "leads", "bound_rate", "contacted_rate"],  # Remove quoted_rate
+        "ai_vs_human_perf": ["ai_contact_type", "leads", "contacted_rate", "bound_rate"],  # Remove quoted_rate, swapped contacted_rate and bound_rate positions
         "golden_window_leakage": ["leads_contacted_after_5m", "leakage_egp24_usd", "potential_egp24_if_fixed"],  # Keep all
-        "speed_to_lead": ["ttc_bucket", "leads", "bound_rate"],  # Remove quote_rate, avg_ttc, avg_ttc_min
+        "speed_to_lead": ["ttc_bucket", "contacted", "avg_p_bind", "quoted_rate"],  # Removed bound_rate column
         "carrier_hit_ratio": ["carrier_tier", "policy_type", "avg_hit_ratio", "total_premium"],  # Remove policies count
-        "human_leverage_ratio": ["agent_id", "leverage_ratio", "premium_per_agent"],  # Remove leads_per_agent
-        "vertical_perf": ["vertical", "leads", "bound_rate", "egp24_per_lead"],  # Remove bound, bind_rate, quote_rate, avg_ttc_min, premium, premium_per_lead
-        "state_perf": ["state", "leads", "bound_rate", "egp24_per_lead"],  # Same as vertical_perf
+        "human_leverage_ratio": ["agent_id", "leads", "premium_per_agent"],  # Removed leverage_ratio, include leads column
+        "vertical_perf": ["vertical", "leads", "egp24_per_lead", "bound_rate"],  # Bound Rate as last column
+        "state_perf": ["state", "leads", "egp24_per_lead", "bound_rate"],  # Bound Rate as last column
         "churn_risk_analysis": ["churn_bucket", "customers", "total_premium_at_risk"],  # Remove avg_churn_risk
         "attribution": ["channel", "first_touch_bound", "last_touch_bound"],  # Remove first_touch_leads, last_touch_leads
         "operational_drilldown": ["ttc_bucket", "leads", "bound_rate"],  # Remove avg_ttc, avg_ttc_min
@@ -662,9 +674,35 @@ def _filter_useful_columns(df: pd.DataFrame, table_type: str) -> pd.DataFrame:
     return df
 
 
+def _format_channel_name(channel: str) -> str:
+    """Format channel names: Meta_Retargeting -> Meta Retargeting (remove underscores)"""
+    if pd.isna(channel) or not isinstance(channel, str):
+        return channel
+    # Replace all underscores with spaces
+    return channel.replace('_', ' ')
+
+
+def _format_vertical_name(vertical: str) -> str:
+    """Format vertical names: Professional_Services -> Professional Services (remove underscores)"""
+    if pd.isna(vertical) or not isinstance(vertical, str):
+        return vertical
+    # Replace all underscores with spaces
+    return vertical.replace('_', ' ')
+
+
 def _semantic_column_names(df: pd.DataFrame, table_type: str = "default") -> pd.DataFrame:
     """Convert technical column names to semantic, user-friendly names."""
     df = df.copy()
+    
+    # Format channel names for tables that have channel columns
+    channel_columns = ["channel", "source_channel", "origin_channel"]
+    for col in channel_columns:
+        if col in df.columns:
+            df[col] = df[col].apply(_format_channel_name)
+    
+    # Format vertical names for tables that have vertical columns
+    if "vertical" in df.columns:
+        df["vertical"] = df["vertical"].apply(_format_vertical_name)
     
     # Define semantic mappings for different table types
     semantic_maps = {
@@ -697,7 +735,7 @@ def _semantic_column_names(df: pd.DataFrame, table_type: str = "default") -> pd.
             "avg_premium": "Avg Premium",
             "bound_rate": "Bound Rate",
             "opportunity_score": "Opportunity Score",
-            "avg_egp24": "Avg EGP24"
+            "avg_egp24": "Expected Profit per Lead (24-mo)"
         },
         "lead_quality_by_channel": {
             "source_channel": "Channel",
@@ -709,17 +747,17 @@ def _semantic_column_names(df: pd.DataFrame, table_type: str = "default") -> pd.
             "total_egp24": "Total EGP24",
             "total_cac": "Total CAC",
             "quality_score": "Quality Score",
-            "roi_egp24": "ROI (EGP24)"
+            "roi_egp24": "ROI"
         },
         "paid_efficiency_by_channel": {
             "channel": "Channel",
             "leads": "Leads",
             "bound": "Bound",
             "spend_usd": "Spend ($)",
-            "cpl": "CPL",
-            "cpb": "CPB",
+            "cpl": "Cost Per Lead",
+            "cpb": "Cost Per Bound",
             "premium": "Premium",
-            "roi_egp24": "ROI (EGP24)",
+            "roi_egp24": "ROI",
             "cost_per_1k_premium": "Cost per $1K Premium"
         },
         "paid_efficiency_by_campaign": {
@@ -728,14 +766,14 @@ def _semantic_column_names(df: pd.DataFrame, table_type: str = "default") -> pd.
             "leads": "Leads",
             "bound": "Bound",
             "spend_usd": "Spend ($)",
-            "cpl": "CPL",
-            "cpb": "CPB",
+            "cpl": "Cost Per Lead",
+            "cpb": "Cost Per Bound",
             "premium": "Premium",
-            "roi_egp24": "ROI (EGP24)"
+            "roi_egp24": "ROI"
         },
         "ai_vs_human_perf": {
             "ai_contact_type": "Contact Type",
-            "leads": "Leads",
+            "leads": "Assigned Leads",
             "contacted_rate": "Contacted Rate",
             "quoted_rate": "Quoted Rate",
             "bound_rate": "Bound Rate"
@@ -748,8 +786,13 @@ def _semantic_column_names(df: pd.DataFrame, table_type: str = "default") -> pd.
         "speed_to_lead": {
             "ttc_bucket": "Time-to-Contact",
             "leads": "Leads",
+            "quoted": "Contacted Leads",
+            "contacted": "Contacted Leads",
+            "quoted_leads": "Contacted Leads",
             "bound_rate": "Bound Rate",
+            "quoted_rate": "Quote Rate",
             "quote_rate": "Quote Rate",
+            "avg_p_bind": "Lead Quality Perception",
             "avg_ttc": "Avg TTC (min)",
             "avg_ttc_min": "Avg TTC (min)"
         },
@@ -762,6 +805,7 @@ def _semantic_column_names(df: pd.DataFrame, table_type: str = "default") -> pd.
         },
         "human_leverage_ratio": {
             "agent_id": "Agent ID",
+            "leads": "Leads Handled",
             "premium_per_agent": "Premium per Agent",
             "leads_per_agent": "Leads per Agent",
             "leverage_ratio": "Leverage Ratio"
@@ -776,7 +820,7 @@ def _semantic_column_names(df: pd.DataFrame, table_type: str = "default") -> pd.
             "avg_ttc_min": "Avg TTC (min)",
             "premium": "Premium",
             "premium_per_lead": "Premium per Lead",
-            "egp24_per_lead": "EGP24 per Lead"
+            "egp24_per_lead": "Expected Profit per Lead (24-mo)"
         },
         "state_perf": {
             "state": "State",
@@ -788,7 +832,7 @@ def _semantic_column_names(df: pd.DataFrame, table_type: str = "default") -> pd.
             "avg_ttc_min": "Avg TTC (min)",
             "premium": "Premium",
             "premium_per_lead": "Premium per Lead",
-            "egp24_per_lead": "EGP24 per Lead"
+            "egp24_per_lead": "Expected Profit per Lead (24-mo)"
         },
         "agent_perf": {
             "agent_id": "Agent ID",
@@ -798,7 +842,7 @@ def _semantic_column_names(df: pd.DataFrame, table_type: str = "default") -> pd.
             "bound_rate": "Bound Rate",
             "avg_ttc_min": "Avg TTC (min)",
             "egp24_total": "Total EGP24",
-            "egp24_per_lead": "EGP24 per Lead"
+            "egp24_per_lead": "Expected Profit per Lead (24-mo)"
         },
         "churn_risk_analysis": {
             "churn_bucket": "Churn Risk",
@@ -992,7 +1036,7 @@ def _render_header(insights) -> None:
     metrics_config = [
         ("📈", "Leads", f"{s['leads']:,}", None, "#3b82f6"),
         ("🎯", "Bound", f"{s['bound_leads']:,}", _pct(s["bind_rate"]), "#10b981"),
-        ("⚙️", "Automation", _pct(s.get("automation_rate", 0.0)), None, "#8b5cf6"),
+        ("⚙️", "Automated Binding", _pct(s.get("automation_rate", 0.0)), None, "#8b5cf6"),
         ("💰", "LTV:CAC", f"{s.get('cac_ltv_ratio', 0.0):.1f}:1", 
          "✅" if s.get('cac_ltv_ratio', 0) >= 3.0 else "⚠️", "#f59e0b"),
         ("💵", "Net Revenue", _money(s.get("net_commission_revenue_usd", 0)), None, "#10b981"),
@@ -1017,6 +1061,39 @@ def _render_header(insights) -> None:
 def _filter_leads(leads: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     """Filter leads and return filtered dataframe + hash for caching."""
     st.sidebar.markdown('<div style="padding: 1rem 0;"><h2 style="color: white; font-size: 1.3rem; margin: 0;">🔍 Filters</h2></div>', unsafe_allow_html=True)
+    
+    # OpenAI API Key input for copilot
+    st.sidebar.divider()
+    st.sidebar.markdown('<div style="padding: 1rem 0;"><h2 style="color: white; font-size: 1.3rem; margin: 0;">⚙️ Copilot Settings</h2></div>', unsafe_allow_html=True)
+    
+    # Initialize session state for API key
+    if "user_openai_api_key" not in st.session_state:
+        st.session_state.user_openai_api_key = ""
+    
+    # API key input
+    api_key_input = st.sidebar.text_input(
+        "OpenAI API Key (optional)",
+        value=st.session_state.user_openai_api_key,
+        type="password",
+        help="Enter your OpenAI API key to use the GTM Copilot. Leave empty to use the default demo key.",
+        key="openai_key_input"
+    )
+    
+    # Update session state when user enters key
+    if api_key_input != st.session_state.user_openai_api_key:
+        st.session_state.user_openai_api_key = api_key_input
+        # Clear existing copilot client to force re-initialization with new key
+        if "copilot_client" in st.session_state:
+            del st.session_state.copilot_client
+        st.rerun()
+    
+    if api_key_input:
+        st.sidebar.success("✓ API key set")
+    else:
+        st.sidebar.info("💡 Using demo key. Enter your own key for full access.")
+    
+    st.sidebar.divider()
+    
     min_date = pd.to_datetime(leads["lead_created_at"]).min().date()
     max_date = pd.to_datetime(leads["lead_created_at"]).max().date()
     date_range = st.sidebar.date_input("Lead created date", value=(min_date, max_date))
@@ -1063,7 +1140,7 @@ def _render_dashboard(raw) -> None:
     _render_header(insights)
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["📊 Overview", "💰 Paid Efficiency", "⚡ Speed-to-Lead", "🎯 Segments", "📈 Trends & Attribution"]
+        ["📊 Overview", "💰 Paid Efficiency", "☎️ Outreach Intelligence", "🎯Target Segments", "📈 Performance Drivers"]
     )
 
     with tab1:
@@ -1071,10 +1148,115 @@ def _render_dashboard(raw) -> None:
         col1, col2 = st.columns([2, 1])
         with col1:
             st.markdown("### 📊 Conversion Funnel")
-            st.caption("Track lead progression with conversion lift insights")
-            funnel = _filter_useful_columns(insights.funnel.copy(), "funnel")
-            funnel = _semantic_column_names(funnel, "funnel")
-            st.dataframe(funnel, use_container_width=True, hide_index=True)
+            
+            # Create dual-layer funnel visualization
+            funnel = insights.funnel.copy()
+            
+            # Create funnel chart with annotations
+            fig_funnel = go.Figure()
+            
+            # Layer 1: Primary funnel - Count at each stage
+            # Use a gradient color scale for premium look
+            colors = ["#3b82f6", "#2563eb", "#1d4ed8", "#1e40af"]  # Blue gradient
+            
+            fig_funnel.add_trace(go.Funnel(
+                y=funnel["stage"],
+                x=funnel["count"],
+                textposition="inside",
+                textinfo="value+percent initial",
+                textfont=dict(size=14, color="white", family="Arial Black"),
+                marker=dict(
+                    color=[colors[min(i, len(colors)-1)] for i in range(len(funnel))],
+                    line=dict(color="white", width=3),
+                    opacity=0.9
+                ),
+                connector=dict(
+                    line=dict(color="rgba(59, 130, 246, 0.3)", width=3, dash="dot")
+                ),
+                name="Count"
+            ))
+            
+            # Layer 2: Add annotations for conversion rates and lift (overlay)
+            annotations = []
+            for idx, row in funnel.iterrows():
+                # Calculate conversion rate for this step
+                if idx == 0:
+                    # First stage: show 100%
+                    rate_text = "100%"
+                    annotation_text = rate_text
+                else:
+                    # Calculate step conversion rate
+                    prev_count = funnel.iloc[idx-1]["count"]
+                    current_count = row["count"]
+                    step_rate = (current_count / prev_count) if prev_count > 0 else 0
+                    rate_text = f"{step_rate:.1%}"
+                    
+                    # Add conversion lift if available
+                    lift = row.get('conversion_lift', 0)
+                    if lift > 0 and idx > 1:
+                        lift_text = f"↑{lift:.2f}x"
+                        annotation_text = f"{rate_text}<br><span style='font-size:10px;'>{lift_text}</span>"
+                    else:
+                        annotation_text = rate_text
+                
+                # Position annotation on the right side of each funnel segment
+                annotations.append(dict(
+                    x=row['count'] * 1.15,  # Position to the right of the bar
+                    y=row['stage'],
+                    text=annotation_text,
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowsize=1,
+                    arrowwidth=2,
+                    arrowcolor="rgba(59, 130, 246, 0.6)",
+                    ax=20,
+                    ay=0,
+                    font=dict(size=12, color="#1e40af", family="Arial Black"),
+                    bgcolor="rgba(255, 255, 255, 0.95)",
+                    bordercolor="#3b82f6",
+                    borderwidth=2,
+                    borderpad=6,
+                    xref="x",
+                    yref="y",
+                    xanchor="left",
+                    yanchor="middle"
+                ))
+            
+            fig_funnel.update_layout(
+                title="",
+                height=450,
+                margin=dict(l=100, r=150, t=20, b=40),
+                annotations=annotations,
+                showlegend=False,
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                hovermode="y unified"
+            )
+            
+            # Update axes
+            fig_funnel.update_xaxes(
+                title_text="<b>Count</b>",
+                showgrid=True,
+                gridcolor="rgba(0,0,0,0.08)",
+                title_font=dict(size=13, color="#111827", family="Arial"),
+                tickfont=dict(size=11, color="#6b7280")
+            )
+            
+            fig_funnel.update_yaxes(
+                title_text="<b>Stage</b>",
+                showgrid=False,
+                title_font=dict(size=13, color="#111827", family="Arial"),
+                tickfont=dict(size=12, color="#111827", family="Arial")
+            )
+            
+            _update_chart_layout(fig_funnel, height=450, showlegend=False)
+            st.plotly_chart(fig_funnel, use_container_width=True)
+            
+            # Optional: Show table below for detailed view
+            funnel_table = _filter_useful_columns(insights.funnel.copy(), "funnel")
+            funnel_table = _semantic_column_names(funnel_table, "funnel")
+            with st.expander("📋 View Detailed Funnel Data", expanded=False):
+                st.dataframe(funnel_table, use_container_width=True, hide_index=True)
         
         with col2:
             st.markdown("### 💡 Quick Wins")
@@ -1095,7 +1277,7 @@ def _render_dashboard(raw) -> None:
             leakage = insights.golden_window_leakage.iloc[0]
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("💰 Leakage (EGP24)", _money(leakage.get("leakage_egp24_usd", 0)), delta=None)
+                st.metric("💰 Leakage", _money(leakage.get("leakage_egp24_usd", 0)), delta=None)
             with col2:
                 st.metric("🎯 Potential if Fixed", _money(leakage.get("potential_egp24_if_fixed", 0)), delta=None)
         else:
@@ -1115,6 +1297,9 @@ def _render_dashboard(raw) -> None:
                 # Use semantic column names for chart
                 stq_chart = insights.stq_by_vertical.head(10).copy()
                 stq_chart = stq_chart.rename(columns={"vertical": "Vertical", "avg_stq_ratio": "Avg STQ Ratio"})
+                # Format vertical names in chart
+                if "Vertical" in stq_chart.columns:
+                    stq_chart["Vertical"] = stq_chart["Vertical"].apply(_format_vertical_name)
                 fig_stq = px.bar(
                     stq_chart,
                     x="Vertical",
@@ -1165,33 +1350,69 @@ def _render_dashboard(raw) -> None:
             st.info("Lead score intensity data not available.")
 
     with tab2:
-        st.markdown("### 🎯 Vertical Opportunity Score")
-        st.caption("Find + Flood micro-segments | Rank by vertical + intent + premium")
-        if not insights.vertical_opportunity_score.empty:
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                opp_filtered = _filter_useful_columns(insights.vertical_opportunity_score.copy(), "vertical_opportunity_score")
-                st.dataframe(_semantic_column_names(opp_filtered, "vertical_opportunity_score"), use_container_width=True, hide_index=True)
-            with col2:
-                # Use semantic column names for chart
-                opp_chart = insights.vertical_opportunity_score.head(12).copy()
-                opp_chart = opp_chart.rename(columns={
-                    "vertical": "Vertical",
-                    "opportunity_score": "Opportunity Score"
-                })
-                fig_opp = px.bar(
-                    opp_chart,
-                    x="Vertical",
-                    y="Opportunity Score",
-                    color="Opportunity Score",
-                    color_continuous_scale="Greens",
-                    title="Top Vertical Opportunities",
-                    labels={"Vertical": "Vertical", "Opportunity Score": "Opportunity Score"}
-                )
-                _update_chart_layout(fig_opp, height=400, showlegend=False)
-                st.plotly_chart(fig_opp, use_container_width=True)
-        else:
-            st.info("Vertical opportunity score data not available.")
+        st.markdown("### 💰 Paid Efficiency by Channel")
+        ch = insights.paid_efficiency_by_channel.copy()
+        
+        # Use semantic column names for chart - convert to grouped bar chart
+        ch_chart = ch.copy()
+        ch_chart = ch_chart.rename(columns={
+            "cpl": "Cost Per Lead",
+            "roi_egp24": "ROI",
+            "spend_usd": "Spend ($)",
+            "channel": "Channel",
+            "cpb": "Cost Per Bound",
+            "cost_per_1k_premium": "Cost per $1K Premium",
+            "leads": "Leads",
+            "bound": "Bound",
+            "premium": "Premium"
+        })
+        # Format channel names in chart
+        if "Channel" in ch_chart.columns:
+            ch_chart["Channel"] = ch_chart["Channel"].apply(_format_channel_name)
+        
+        # Convert ROI ratio to actual dollar value comparable to Cost Per Lead
+        # ROI Value per Lead = ROI * Cost Per Lead (gives expected gross profit per lead in dollars)
+        ch_chart["ROI Value per Lead"] = ch_chart["ROI"] * ch_chart["Cost Per Lead"]
+        
+        # Prepare data for grouped bar chart
+        # Create a long format dataframe with metric type and value
+        ch_melted = pd.melt(
+            ch_chart,
+            id_vars=["Channel"],
+            value_vars=["Cost Per Lead", "ROI Value per Lead"],
+            var_name="Metric",
+            value_name="Value"
+        )
+        
+        # Create grouped bar chart
+        fig = px.bar(
+            ch_melted,
+            x="Channel",
+            y="Value",
+            color="Metric",
+            barmode="group",
+            title="Channel Tradeoffs: Cost Per Lead vs ROI",
+            labels={"Channel": "Channel", "Value": "Value", "Metric": "Metric"},
+            color_discrete_map={"Cost Per Lead": "#ef4444", "ROI Value per Lead": "#10b981"}
+        )
+        # Position legend at bottom right
+        fig.update_layout(
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.15,
+                xanchor="right",
+                x=1.0,
+                title_text=""  # Remove "Metric" title from legend
+            ),
+            margin=dict(b=80)  # Add bottom margin for legend
+        )
+        _update_chart_layout(fig, height=500, showlegend=True)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Display table below the chart
+        ch_filtered = _filter_useful_columns(ch, "paid_efficiency_by_channel")
+        st.dataframe(_semantic_column_names(ch_filtered, "paid_efficiency_by_channel"), use_container_width=True, hide_index=True)
         
         st.divider()
         
@@ -1207,59 +1428,29 @@ def _render_dashboard(raw) -> None:
                 quality_chart = insights.lead_quality_by_channel.copy()
                 quality_chart = quality_chart.rename(columns={
                     "avg_risk_score": "Avg Risk Score",
-                    "roi_egp24": "ROI (EGP24)",
+                    "roi_egp24": "ROI",
                     "leads": "Leads",
                     "quality_score": "Quality Score",
                     "source_channel": "Channel"
                 })
+                # Format channel names in chart
+                if "Channel" in quality_chart.columns:
+                    quality_chart["Channel"] = quality_chart["Channel"].apply(_format_channel_name)
                 fig_quality = px.scatter(
                     quality_chart,
                     x="Avg Risk Score",
-                    y="ROI (EGP24)",
+                    y="ROI",
                     size="Leads",
                     color="Quality Score",
                     hover_data=["Channel"],
                     color_continuous_scale="RdYlGn",
                     title="Risk Score vs ROI by Channel",
-                    labels={"Avg Risk Score": "Avg Risk Score", "ROI (EGP24)": "ROI (EGP24)"}
+                    labels={"Avg Risk Score": "Avg Risk Score", "ROI": "ROI"}
                 )
                 _update_chart_layout(fig_quality, height=400, showlegend=True)
                 st.plotly_chart(fig_quality, use_container_width=True)
         else:
             st.info("Lead quality data not available.")
-        
-        st.divider()
-        
-        st.markdown("### 💰 Paid Efficiency by Channel")
-        ch = insights.paid_efficiency_by_channel.copy()
-        ch_filtered = _filter_useful_columns(ch, "paid_efficiency_by_channel")
-        st.dataframe(_semantic_column_names(ch_filtered, "paid_efficiency_by_channel"), use_container_width=True, hide_index=True)
-        
-        # Use semantic column names for chart
-        ch_chart = ch.copy()
-        ch_chart = ch_chart.rename(columns={
-            "cpl": "CPL",
-            "roi_egp24": "ROI (EGP24)",
-            "spend_usd": "Spend ($)",
-            "channel": "Channel",
-            "cpb": "CPB",
-            "cost_per_1k_premium": "Cost per $1K Premium",
-            "leads": "Leads",
-            "bound": "Bound",
-            "premium": "Premium"
-        })
-        fig = px.scatter(
-            ch_chart,
-            x="CPL",
-            y="ROI (EGP24)",
-            size="Spend ($)",
-            color="Channel",
-            hover_data=["CPB", "Cost per $1K Premium", "Leads", "Bound", "Premium"],
-            title="Channel Tradeoffs: CPL vs ROI",
-            labels={"CPL": "CPL", "ROI (EGP24)": "ROI (EGP24)"}
-        )
-        _update_chart_layout(fig, height=500, showlegend=True)
-        st.plotly_chart(fig, use_container_width=True)
         
         st.divider()
         
@@ -1269,16 +1460,90 @@ def _render_dashboard(raw) -> None:
         st.dataframe(_semantic_column_names(camp_filtered, "paid_efficiency_by_campaign"), use_container_width=True, hide_index=True)
 
     with tab3:
-        st.markdown("### 🤖 AI Voice vs Human Performance")
-        st.caption("Validates ROI of internal 'AI Grid' infrastructure")
-        if not insights.ai_vs_human_perf.empty:
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                ai_filtered = _filter_useful_columns(insights.ai_vs_human_perf.copy(), "ai_vs_human_perf")
-                st.dataframe(_semantic_column_names(ai_filtered, "ai_vs_human_perf"), use_container_width=True, hide_index=True)
-            with col2:
-                # Use semantic column names for chart
+        # Outreach Intelligence Impact and AI Voice vs Human Performance in side-by-side columns
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            # Use a container div with flexbox to align comment at bottom
+            st.markdown('<div class="column-container">', unsafe_allow_html=True)
+            st.markdown("### ⚡ Time-to-lead impact")
+            speed = insights.speed_to_lead.copy()
+            
+            # Define time bucket order (fastest to slowest)
+            time_order = ["<=5m", "5-15m", "15-60m", "1-4h", "4-24h", "1-7d"]
+            
+            # Filter out 1-7d row
+            speed = speed[speed["ttc_bucket"] != "1-7d"].copy()
+            
+            # Create a mapping for sorting
+            speed["_sort_order"] = speed["ttc_bucket"].map({bucket: idx for idx, bucket in enumerate(time_order)})
+            speed = speed.sort_values("_sort_order", na_position="last").drop(columns=["_sort_order"])
+            
+            # Calculate contacted leads (leads * contacted_rate)
+            if "contacted_rate" in speed.columns and "leads" in speed.columns:
+                speed["contacted"] = (speed["leads"] * speed["contacted_rate"]).round().astype(int)
+                # Keep quote_rate and avg_p_bind for display, replace leads with contacted
+                speed_display = speed.copy()
+                speed_display = speed_display.drop(columns=["leads"])
+                # Keep contacted column for semantic mapping
+            else:
+                speed_display = speed.copy()
+            
+            # Chart on top
+            speed_chart = speed.copy()
+            speed_chart = speed_chart.rename(columns={
+                "ttc_bucket": "Time-to-Contact",
+                "bound_rate": "Bound Rate"
+            })
+            # Ensure chart uses the sorted order
+            speed_chart["Time-to-Contact"] = pd.Categorical(speed_chart["Time-to-Contact"], categories=time_order, ordered=True)
+            speed_chart = speed_chart.sort_values("Time-to-Contact")
+            
+            fig = px.bar(
+                speed_chart,
+                x="Time-to-Contact",
+                y="Bound Rate",
+                color="Bound Rate",
+                color_continuous_scale="Greens",
+                title="Bind Rate by Time-to-Contact",
+                labels={"Time-to-Contact": "Time-to-Contact", "Bound Rate": "Bound Rate"},
+                category_orders={"Time-to-Contact": time_order}
+            )
+            _update_chart_layout(fig, height=400, showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Table below (already sorted) - use speed_display which has contacted leads, quote_rate, and avg_p_bind
+            speed_filtered = _filter_useful_columns(speed_display, "speed_to_lead")
+            speed_semantic = _semantic_column_names(speed_filtered, "speed_to_lead")
+            # Ensure "contacted" or "quoted" is displayed as "Contacted Leads"
+            if "quoted_leads" in speed_semantic.columns:
+                speed_semantic = speed_semantic.rename(columns={"quoted_leads": "Contacted Leads"})
+            elif "quoted" in speed_semantic.columns:
+                speed_semantic = speed_semantic.rename(columns={"quoted": "Contacted Leads"})
+            elif "contacted" in speed_semantic.columns:
+                speed_semantic = speed_semantic.rename(columns={"contacted": "Contacted Leads"})
+            # Also check for "Leads" column and rename if needed
+            if "Leads" in speed_semantic.columns:
+                speed_semantic = speed_semantic.rename(columns={"Leads": "Contacted Leads"})
+            st.dataframe(speed_semantic, use_container_width=True, hide_index=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col2:
+            # Use a container div with flexbox to align comment at bottom
+            st.markdown('<div class="column-container">', unsafe_allow_html=True)
+            st.markdown("### 🤖 AI Voice vs Human Performance")
+            if not insights.ai_vs_human_perf.empty:
+                # Chart on top
                 ai_chart = insights.ai_vs_human_perf.copy()
+                # Map contact type values to readable format
+                contact_type_map = {
+                    "ai_voice": "AI Voice",
+                    "ai_email": "AI Email",
+                    "mixed": "Mixed",
+                    "human": "Human"
+                }
+                ai_chart["ai_contact_type"] = ai_chart["ai_contact_type"].map(contact_type_map).fillna(ai_chart["ai_contact_type"])
                 ai_chart = ai_chart.rename(columns={
                     "ai_contact_type": "Contact Type",
                     "bound_rate": "Bound Rate",
@@ -1295,50 +1560,149 @@ def _render_dashboard(raw) -> None:
                 )
                 _update_chart_layout(fig_ai, height=400, showlegend=False)
                 st.plotly_chart(fig_ai, use_container_width=True)
+                
+                # Table below - also map contact types
+                ai_filtered = _filter_useful_columns(insights.ai_vs_human_perf.copy(), "ai_vs_human_perf")
+                if "ai_contact_type" in ai_filtered.columns:
+                    ai_filtered["ai_contact_type"] = ai_filtered["ai_contact_type"].map(contact_type_map).fillna(ai_filtered["ai_contact_type"])
+                st.dataframe(_semantic_column_names(ai_filtered, "ai_vs_human_perf"), use_container_width=True, hide_index=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.info("AI vs Human performance data not available.")
+                st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.divider()
+        
+        # Comments aligned above Agent Productivity Index
+        col_comment1, col_comment2 = st.columns([1, 1])
+        with col_comment1:
+            st.markdown("💡 Contacting within 5 minutes drives a ~5× higher bound rate vs 4–24h delays.")
+        with col_comment2:
+            st.markdown("💡 AI Voice delivers ~1.2× higher bound rate than human outreach with higher contact coverage")
+        
+        st.markdown("### 💼 Agent Productivity Index")
+        st.caption("Premium managed per agent with AI support | Target: 1:1,000 ratio")
+        if not insights.human_leverage_ratio.empty:
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                leverage_filtered = _filter_useful_columns(insights.human_leverage_ratio.head(30).copy(), "human_leverage_ratio")
+                leverage_semantic = _semantic_column_names(leverage_filtered, "human_leverage_ratio")
+                
+                # Calculate target value (median) for Premium per Agent
+                if "Premium per Agent" in leverage_semantic.columns:
+                    premium_values = pd.to_numeric(leverage_semantic["Premium per Agent"], errors='coerce')
+                    target_value = premium_values.median()  # Use median as target
+                    tolerance = 0.15  # 15% tolerance for "around target" (yellow zone)
+                    
+                    def color_premium_per_agent(val):
+                        """Color code Premium per Agent based on target value"""
+                        if pd.isna(val):
+                            return ''
+                        try:
+                            val_float = float(val) if isinstance(val, str) else val
+                            # Green: above target
+                            if val_float > target_value * (1 + tolerance):
+                                return 'background-color: #10b981; color: white; font-weight: bold'
+                            # Yellow: around target (within tolerance)
+                            elif val_float >= target_value * (1 - tolerance):
+                                return 'background-color: #f59e0b; color: white; font-weight: bold'
+                            # Red: below target
+                            else:
+                                return 'background-color: #ef4444; color: white; font-weight: bold'
+                        except (ValueError, TypeError):
+                            return ''
+                    
+                    # Apply color coding
+                    styled_df = leverage_semantic.style.applymap(
+                        color_premium_per_agent,
+                        subset=["Premium per Agent"]
+                    )
+                    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                else:
+                    st.dataframe(leverage_semantic, use_container_width=True, hide_index=True)
+            with col2:
+                # Use semantic column names for chart
+                leverage_chart = insights.human_leverage_ratio.head(20).copy()
+                leverage_chart = leverage_chart.rename(columns={
+                    "agent_id": "Agent ID",
+                    "leverage_ratio": "Leverage Ratio"
+                })
+                fig_leverage = px.bar(
+                    leverage_chart,
+                    x="Agent ID",
+                    y="Leverage Ratio",
+                    color="Leverage Ratio",
+                    color_continuous_scale="Purples",
+                    title="Agent Productivity Index",
+                    labels={"Agent ID": "Agent ID", "Leverage Ratio": "Leverage Ratio"}
+                )
+                _update_chart_layout(fig_leverage, height=400, showlegend=False)
+                st.plotly_chart(fig_leverage, use_container_width=True)
         else:
-            st.info("AI vs Human performance data not available.")
-        
-        st.divider()
-        
-        st.markdown("### ⚡ Speed-to-Lead Impact")
-        speed = insights.speed_to_lead.copy()
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            speed_filtered = _filter_useful_columns(speed, "speed_to_lead")
-            st.dataframe(_semantic_column_names(speed_filtered, "speed_to_lead"), use_container_width=True, hide_index=True)
-        with col2:
-            # Use semantic column names for chart
-            speed_chart = speed.copy()
-            speed_chart = speed_chart.rename(columns={
-                "ttc_bucket": "Time-to-Contact",
-                "bound_rate": "Bound Rate"
-            })
-            fig = px.bar(
-                speed_chart,
-                x="Time-to-Contact",
-                y="Bound Rate",
-                color="Bound Rate",
-                color_continuous_scale="Greens",
-                title="Bind Rate by Time-to-Contact",
-                labels={"Time-to-Contact": "Time-to-Contact", "Bound Rate": "Bound Rate"}
-            )
-            _update_chart_layout(fig, height=400, showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
-        
-        st.divider()
-        
-        st.markdown("### 📋 Operational Drilldown")
-        st.caption("Filtered leads analysis")
-        t = (
-            f_leads.groupby("ttc_bucket", as_index=False)
-            .agg(leads=("lead_id", "count"), bind_rate=("is_bound", "mean"), avg_ttc=("time_to_first_contact_min", "mean"))
-            .sort_values("ttc_bucket")
-        )
-        t_filtered = _filter_useful_columns(t, "operational_drilldown")
-        st.dataframe(_semantic_column_names(t_filtered, "operational_drilldown"), use_container_width=True, hide_index=True)
+            st.info("Human leverage ratio data not available.")
 
     with tab4:
-        st.markdown("### 🎯 Carrier Hit Ratio")
+        st.markdown("### 🎯 Vertical Opportunity")
+        if not insights.vertical_opportunity_score.empty:
+            # Table at top
+            opp_filtered = _filter_useful_columns(insights.vertical_opportunity_score.copy(), "vertical_opportunity_score")
+            st.dataframe(_semantic_column_names(opp_filtered, "vertical_opportunity_score"), use_container_width=True, hide_index=True)
+            
+            # Two graphs side by side below the table
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                # Top Vertical Opportunities graph
+                opp_chart = insights.vertical_opportunity_score.head(12).copy()
+                opp_chart = opp_chart.rename(columns={
+                    "vertical": "Vertical",
+                    "opportunity_score": "Opportunity Score"
+                })
+                # Format vertical names in chart
+                if "Vertical" in opp_chart.columns:
+                    opp_chart["Vertical"] = opp_chart["Vertical"].apply(_format_vertical_name)
+                fig_opp = px.bar(
+                    opp_chart,
+                    x="Vertical",
+                    y="Opportunity Score",
+                    color="Opportunity Score",
+                    color_continuous_scale="Greens",
+                    title="Top Vertical Opportunities",
+                    labels={"Vertical": "Vertical", "Opportunity Score": "Opportunity Score"}
+                )
+                _update_chart_layout(fig_opp, height=400, showlegend=False)
+                st.plotly_chart(fig_opp, use_container_width=True)
+            
+            with col2:
+                # Top Verticals by Expected Profit per Lead graph
+                v = insights.vertical_perf.copy()
+                v_chart = v.sort_values("egp24_per_lead", ascending=False).head(12).copy()
+                v_chart = v_chart.rename(columns={
+                    "vertical": "Vertical",
+                    "egp24_per_lead": "Expected Profit per Lead (24-mo)"
+                })
+                # Format vertical names in chart
+                if "Vertical" in v_chart.columns:
+                    v_chart["Vertical"] = v_chart["Vertical"].apply(_format_vertical_name)
+                fig = px.bar(
+                    v_chart,
+                    x="Vertical",
+                    y="Expected Profit per Lead (24-mo)",
+                    color="Expected Profit per Lead (24-mo)",
+                    color_continuous_scale="Blues",
+                    title="Top Verticals by Expected Profit per Lead (24-mo)",
+                    labels={"Vertical": "Vertical", "Expected Profit per Lead (24-mo)": "Expected Profit per Lead (24-mo)"}
+                )
+                _update_chart_layout(fig, height=400, showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Vertical opportunity score data not available.")
+        
+        st.divider()
+        
+        st.divider()
+        
+        st.markdown("### 🎯 Carrier Hits")
         st.caption("Which carrier_tier binds most frequently | Optimizes Market-Making Engine")
         if not insights.carrier_hit_ratio.empty:
             col1, col2 = st.columns([1, 1])
@@ -1358,70 +1722,13 @@ def _render_dashboard(raw) -> None:
                     x="Carrier Tier",
                     y="Avg Hit Ratio",
                     color="Policy Type",
-                    title="Carrier Hit Ratio by Tier",
+                    title="Carrier Hits by Tier",
                     labels={"Carrier Tier": "Carrier Tier", "Avg Hit Ratio": "Avg Hit Ratio"}
                 )
                 _update_chart_layout(fig_carrier, height=400, showlegend=True)
                 st.plotly_chart(fig_carrier, use_container_width=True)
         else:
             st.info("Carrier hit ratio data not available.")
-        
-        st.divider()
-        
-        st.markdown("### 👥 Human Leverage Ratio")
-        st.caption("Premium managed per agent with AI support | Target: 1:1,000 ratio")
-        if not insights.human_leverage_ratio.empty:
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                leverage_filtered = _filter_useful_columns(insights.human_leverage_ratio.head(30).copy(), "human_leverage_ratio")
-                st.dataframe(_semantic_column_names(leverage_filtered, "human_leverage_ratio"), use_container_width=True, hide_index=True)
-            with col2:
-                # Use semantic column names for chart
-                leverage_chart = insights.human_leverage_ratio.head(20).copy()
-                leverage_chart = leverage_chart.rename(columns={
-                    "agent_id": "Agent ID",
-                    "leverage_ratio": "Leverage Ratio"
-                })
-                fig_leverage = px.bar(
-                    leverage_chart,
-                    x="Agent ID",
-                    y="Leverage Ratio",
-                    color="Leverage Ratio",
-                    color_continuous_scale="Purples",
-                    title="Human Leverage Ratio",
-                    labels={"Agent ID": "Agent ID", "Leverage Ratio": "Leverage Ratio"}
-                )
-                _update_chart_layout(fig_leverage, height=400, showlegend=False)
-                st.plotly_chart(fig_leverage, use_container_width=True)
-        else:
-            st.info("Human leverage ratio data not available.")
-        
-        st.divider()
-        
-        st.markdown("### 📊 Vertical Performance")
-        v = insights.vertical_perf.copy()
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            v_filtered = _filter_useful_columns(v, "vertical_perf")
-            st.dataframe(_semantic_column_names(v_filtered, "vertical_perf"), use_container_width=True, hide_index=True)
-        with col2:
-            # Use semantic column names for chart
-            v_chart = v.sort_values("egp24_per_lead", ascending=False).head(12).copy()
-            v_chart = v_chart.rename(columns={
-                "vertical": "Vertical",
-                "egp24_per_lead": "EGP24 per Lead"
-            })
-            fig = px.bar(
-                v_chart,
-                x="Vertical",
-                y="EGP24 per Lead",
-                color="EGP24 per Lead",
-                color_continuous_scale="Blues",
-                title="Top Verticals by EGP24 per Lead",
-                labels={"Vertical": "Vertical", "EGP24 per Lead": "EGP24 per Lead"}
-            )
-            _update_chart_layout(fig, height=400, showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
         
         st.divider()
         
@@ -1523,13 +1830,6 @@ def _render_dashboard(raw) -> None:
             _update_chart_layout(fig2, height=350, showlegend=True)
             st.plotly_chart(fig2, use_container_width=True)
         
-        st.divider()
-        
-        st.markdown("### 📊 Attribution Snapshot")
-        st.caption("First-touch vs Last-touch comparison")
-        att = insights.attribution.copy()
-        att_filtered = _filter_useful_columns(att, "attribution")
-        st.dataframe(_semantic_column_names(att_filtered, "attribution"), use_container_width=True, hide_index=True)
 
 
 def _render_copilot_chat_panel() -> None:
@@ -1570,9 +1870,34 @@ def _render_copilot_chat_panel() -> None:
 
 
 def _get_copilot_client() -> tuple[Optional[OpenAI], str, float]:
-    """Get copilot client with API key from environment or Streamlit secrets."""
-    # Get API key from environment variable or Streamlit secrets
-    api_key = os.environ.get("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", None)
+    """Get copilot client with API key from session state, environment, Streamlit secrets, or fallback demo key."""
+    # Try session state first (user-entered key from UI)
+    api_key = st.session_state.get("user_openai_api_key", None)
+    if api_key and api_key.strip():  # Only use if non-empty
+        api_key = api_key.strip()
+    else:
+        api_key = None
+    
+    # Then try environment variable
+    if not api_key:
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if api_key:
+            api_key = api_key.strip()
+    
+    # Then try Streamlit secrets
+    if not api_key:
+        try:
+            api_key = st.secrets.get("OPENAI_API_KEY", None)
+            if api_key:
+                api_key = api_key.strip()
+        except:
+            api_key = None
+    
+    # Fallback: If no key found, return None (user must provide key via Streamlit secrets or UI)
+    # For Streamlit Cloud deployment, set OPENAI_API_KEY in Streamlit Cloud secrets
+    if not api_key:
+        api_key = None
+    
     model = "gpt-4o-mini"
     temperature = 0.2
     
