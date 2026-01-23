@@ -1100,7 +1100,26 @@ def _filter_leads(leads: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     """Filter leads and return filtered dataframe + hash for caching."""
     st.sidebar.markdown('<div style="padding: 1rem 0;"><h2 style="color: white; font-size: 1.3rem; margin: 0;">🔍 Filters</h2></div>', unsafe_allow_html=True)
     
-    # OpenAI API Key input for copilot
+    min_date = pd.to_datetime(leads["lead_created_at"]).min().date()
+    max_date = pd.to_datetime(leads["lead_created_at"]).max().date()
+    date_range = st.sidebar.date_input("Lead created date", value=(min_date, max_date))
+    if isinstance(date_range, tuple) and len(date_range) == 2:
+        d0, d1 = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    else:
+        d0, d1 = pd.to_datetime(min_date), pd.to_datetime(max_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
+    channels = sorted(leads["source_channel"].dropna().unique().tolist())
+    selected_channels = st.sidebar.multiselect("Source channel", options=channels, default=channels)
+
+    verticals = sorted(leads["vertical"].dropna().unique().tolist())
+    selected_verticals = st.sidebar.multiselect("Vertical", options=verticals, default=verticals)
+
+    states = sorted(leads["state"].dropna().unique().tolist())
+    selected_states = st.sidebar.multiselect("State", options=states, default=states)
+
+    es = st.sidebar.multiselect("E&S eligible", options=["All", "Yes", "No"], default=["All"])
+
+    # OpenAI API Key input for copilot - moved to bottom
     st.sidebar.divider()
     st.sidebar.markdown('<div style="padding: 1rem 0;"><h2 style="color: white; font-size: 1.3rem; margin: 0;">⚙️ Copilot Settings</h2></div>', unsafe_allow_html=True)
     
@@ -1129,27 +1148,6 @@ def _filter_leads(leads: pd.DataFrame) -> tuple[pd.DataFrame, str]:
         st.sidebar.success("✓ API key set")
     else:
         st.sidebar.info("💡 Using demo key. Enter your own key for full access.")
-    
-    st.sidebar.divider()
-    
-    min_date = pd.to_datetime(leads["lead_created_at"]).min().date()
-    max_date = pd.to_datetime(leads["lead_created_at"]).max().date()
-    date_range = st.sidebar.date_input("Lead created date", value=(min_date, max_date))
-    if isinstance(date_range, tuple) and len(date_range) == 2:
-        d0, d1 = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-    else:
-        d0, d1 = pd.to_datetime(min_date), pd.to_datetime(max_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-
-    channels = sorted(leads["source_channel"].dropna().unique().tolist())
-    selected_channels = st.sidebar.multiselect("Source channel", options=channels, default=channels)
-
-    verticals = sorted(leads["vertical"].dropna().unique().tolist())
-    selected_verticals = st.sidebar.multiselect("Vertical", options=verticals, default=verticals)
-
-    states = sorted(leads["state"].dropna().unique().tolist())
-    selected_states = st.sidebar.multiselect("State", options=states, default=states)
-
-    es = st.sidebar.multiselect("E&S eligible", options=["All", "Yes", "No"], default=["All"])
 
     out = leads.copy()
     out = out[(out["lead_created_at"] >= d0) & (out["lead_created_at"] <= d1)]
@@ -1970,9 +1968,18 @@ def _handle_copilot_input(raw, insights) -> None:
     if "processing_query" not in st.session_state:
         st.session_state.processing_query = False
     
-    # Get client from session state (API key is embedded)
+    # Get client from session state, or try to initialize it from secrets/environment
     if "copilot_client" not in st.session_state or st.session_state.copilot_client is None:
-        return
+        # Try to get client from secrets/environment if not in session state
+        client, model, temperature = _get_copilot_client()
+        if client is not None:
+            st.session_state.copilot_client = client
+            st.session_state.copilot_model = model
+            st.session_state.copilot_temperature = temperature
+            st.session_state.copilot_insights = insights
+        else:
+            # No client available - don't show chat input
+            return
     
     # Chat input at bottom
     user_msg = st.chat_input("Ask the GTM copilot…")
